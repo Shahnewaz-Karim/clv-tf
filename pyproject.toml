@@ -1,0 +1,76 @@
+[project]
+name = "clv-tf"
+version = "0.1.0"
+description = "12-month B2B Customer Lifetime Value prediction with TensorFlow (multi-task: CLV regression + churn classification)"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+authors = [{ name = "Ron Teeiba" }]
+license = { text = "MIT" }
+dependencies = [
+    "tensorflow==2.16.2",
+    # On Windows the `tensorflow` shim wheel only declares a runtime dep on
+    # `tensorflow-intel`; uv's resolver doesn't always pull it in transitively
+    # so we pin it explicitly. Inert on non-Windows.
+    "tensorflow-intel==2.16.2 ; platform_system == 'Windows'",
+    "numpy>=1.26,<2.0",
+    "pandas>=2.2",
+    "pyarrow>=15.0",
+    "scikit-learn>=1.4",
+    "lightgbm>=4.3",
+    "scipy>=1.12",
+    "typer>=0.12",
+    "pyyaml>=6.0",
+    "matplotlib>=3.8",
+    "seaborn>=0.13",
+    "tqdm>=4.66",
+    "shap>=0.45",
+    "tabulate>=0.9",  # used by pandas.DataFrame.to_markdown for the results table
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-xdist>=3.5",
+    "jupyter>=1.0",
+    "nbformat>=5.10",
+    "nbclient>=0.10",
+    "ipykernel>=6.29",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+clv = "src.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.uv]
+# tensorflow-io-gcs-filesystem stopped publishing Windows wheels after 0.31; TF
+# pulls it transitively but doesn't actually need it for our code paths. The
+# never-matching environment marker effectively removes it from the resolution.
+override-dependencies = [
+    "tensorflow-io-gcs-filesystem ; sys_platform == 'never'",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N"]
+# E501: long lines covered by formatter, not linter.
+# N806/N812/N803: scientific-Python conventions (X for feature matrices,
+# T for time dim, L for keras.layers alias) — flagging these is noise.
+ignore = ["E501", "N806", "N812", "N803"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::FutureWarning",
+]

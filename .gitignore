@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Environments
+.venv/
+.env
+
+# Project artifacts (generated)
+data/synthetic/
+models/*/
+!models/.gitkeep
+runs/
+logs/
+mlruns/
+*.log
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# uv
+uv.lock.bak

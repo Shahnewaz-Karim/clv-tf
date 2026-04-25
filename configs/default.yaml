@@ -1,0 +1,52 @@
+# Default training & data config for clv-tf.
+# Override any value at the CLI: `clv train --config configs/default.yaml --epochs 5`.
+
+seed: 42
+
+data:
+  n_customers: 50000
+  n_months_history: 24
+  n_months_target: 12
+  n_products: 200
+  n_categories: 12
+  output_dir: data/synthetic
+  splits:
+    train: 0.70
+    val: 0.15
+    test: 0.15
+
+model:
+  emb_industry: 4
+  emb_region: 3
+  emb_segment: 2
+  emb_channel: 2
+  emb_category: 4
+  lstm_1: 64
+  lstm_2: 32
+  static_dim_1: 64
+  static_dim_2: 32
+  head_dim_1: 64
+  head_dim_2: 32
+  dropout_seq: 0.2
+  dropout_static: 0.1
+  dropout_head: 0.2
+  recency_attn_units: 16
+
+training:
+  batch_size: 256
+  epochs: 30
+  learning_rate: 0.001
+  clipnorm: 1.0
+  loss_weight_clv: 1.0
+  loss_weight_churn: 0.5
+  early_stopping_patience: 7
+  reduce_lr_patience: 3
+  reduce_lr_factor: 0.5
+  min_lr: 1.0e-6
+  shuffle_buffer: 4096
+  log_target: true   # train CLV head on log1p(y); invert at eval
+
+paths:
+  models_dir: models
+  runs_dir: runs
+  reports_dir: runs/reports
