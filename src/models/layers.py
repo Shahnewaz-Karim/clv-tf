@@ -27,12 +27,12 @@ class RecencyWeightedAttention(keras.layers.Layer):
     inactive (masked) months receive ~0 weight and the sequence shape is preserved.
     """
 
-    def __init__(self, units: int = 16, **kwargs):
+    def __init__(self, units: int = 16, **kwargs: object) -> None:
         super().__init__(**kwargs)
         self.units = int(units)
         self.supports_masking = True
 
-    def build(self, input_shape):
+    def build(self, input_shape: tuple[int, ...]) -> None:
         feat_dim = int(input_shape[-1])
         self.W = self.add_weight(
             name="W", shape=(feat_dim, self.units), initializer="glorot_uniform"
@@ -44,7 +44,7 @@ class RecencyWeightedAttention(keras.layers.Layer):
         self.decay = self.add_weight(name="decay", shape=(), initializer="zeros")
         super().build(input_shape)
 
-    def call(self, inputs, mask=None):
+    def call(self, inputs: tf.Tensor, mask: tf.Tensor | None = None) -> tf.Tensor:
         # additive attention scores
         proj = tf.tanh(tf.tensordot(inputs, self.W, axes=[[-1], [0]]) + self.b)  # (B, T, U)
         scores = tf.tensordot(proj, self.v, axes=[[-1], [0]])  # (B, T)
@@ -61,10 +61,10 @@ class RecencyWeightedAttention(keras.layers.Layer):
         attn = tf.nn.softmax(scores, axis=-1)  # (B, T)
         return inputs * attn[:, :, None]
 
-    def compute_mask(self, inputs, mask=None):
+    def compute_mask(self, inputs: tf.Tensor, mask: tf.Tensor | None = None) -> tf.Tensor | None:
         return mask
 
-    def get_config(self):
+    def get_config(self) -> dict[str, object]:
         cfg = super().get_config()
         cfg.update({"units": self.units})
         return cfg
@@ -80,13 +80,15 @@ class RevenueWeightedMAE(keras.metrics.Metric):
     see `evaluation.metrics.revenue_weighted_mae`.
     """
 
-    def __init__(self, name: str = "rev_weighted_mae", weight_floor: float = 1.0, **kwargs):
+    def __init__(self, name: str = "rev_weighted_mae", weight_floor: float = 1.0, **kwargs: object) -> None:
         super().__init__(name=name, **kwargs)
         self.weight_floor = float(weight_floor)
         self.weighted_error = self.add_weight(name="we", initializer="zeros")
         self.total_weight = self.add_weight(name="tw", initializer="zeros")
 
-    def update_state(self, y_true, y_pred, sample_weight=None):
+    def update_state(
+        self, y_true: tf.Tensor, y_pred: tf.Tensor, sample_weight: tf.Tensor | None = None
+    ) -> None:
         y_true = tf.cast(tf.reshape(y_true, [-1]), tf.float32)
         y_pred = tf.cast(tf.reshape(y_pred, [-1]), tf.float32)
         err = tf.abs(y_true - y_pred)
@@ -96,14 +98,14 @@ class RevenueWeightedMAE(keras.metrics.Metric):
         self.weighted_error.assign_add(tf.reduce_sum(err * w))
         self.total_weight.assign_add(tf.reduce_sum(w))
 
-    def result(self):
+    def result(self) -> tf.Tensor:
         return self.weighted_error / (self.total_weight + 1e-9)
 
-    def reset_state(self):
+    def reset_state(self) -> None:
         self.weighted_error.assign(0.0)
         self.total_weight.assign(0.0)
 
-    def get_config(self):
+    def get_config(self) -> dict[str, object]:
         cfg = super().get_config()
         cfg.update({"weight_floor": self.weight_floor})
         return cfg

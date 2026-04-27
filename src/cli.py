@@ -22,6 +22,16 @@ app = typer.Typer(
 )
 
 
+@app.callback()
+def _root(
+    verbose: Annotated[int, typer.Option("--verbose", "-v", count=True, help="-v: INFO, -vv: DEBUG.")] = 0,
+) -> None:
+    """Top-level options. Configures structlog before any command runs."""
+    from .logging_setup import configure
+
+    configure(verbosity=verbose)
+
+
 def _load_config(path: Path) -> dict:
     return yaml.safe_load(path.read_text())
 
@@ -74,11 +84,21 @@ def train(
     output_dir: Annotated[Path | None, typer.Option(help="Override models dir.")] = None,
 ) -> None:
     """Train the deep CLV model."""
+    from .logging_setup import get_logger
     from .training.train import train as train_fn
 
+    log = get_logger("train")
     cfg = _load_config(config)
     out = Path(output_dir) if output_dir else Path(cfg["paths"]["models_dir"]) / "deep_clv"
+    log.info("training_start", output_dir=str(out), epochs_override=epochs)
     summary = train_fn(config=cfg, output_dir=out, epochs=epochs)
+    log.info(
+        "training_complete",
+        epochs_trained=summary["epochs_trained"],
+        epochs_requested=summary["epochs_requested"],
+        train_seconds=summary["train_seconds"],
+        params=summary["model_params"],
+    )
     typer.echo(json.dumps({k: v for k, v in summary.items() if k != "config"}, indent=2, default=str))
 
 
@@ -90,10 +110,19 @@ def evaluate(
 ) -> None:
     """Evaluate baselines + deep model and write the comparison report."""
     from .evaluation.report import evaluate_all
+    from .logging_setup import get_logger
 
+    log = get_logger("evaluate")
     cfg = _load_config(config)
     md = Path(model_dir) if model_dir else Path(cfg["paths"]["models_dir"]) / "deep_clv"
+    log.info("evaluation_start", model_dir=str(md), include_deep=True)
     summary = evaluate_all(config=cfg, model_dir=md, output_dir=output_dir, include_deep=True)
+    log.info(
+        "evaluation_complete",
+        primary_model=summary["primary_model"],
+        n_test=summary["n_test"],
+        models=[r["model"] for r in summary["metrics_table"]],
+    )
     table_path = Path(summary["paths"]["results_csv"]).with_suffix(".md")
     typer.echo(table_path.read_text())
 

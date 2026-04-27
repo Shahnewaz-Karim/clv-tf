@@ -4,7 +4,7 @@
 PY := uv run
 CLI := $(PY) python -m src.cli
 
-.PHONY: help setup data train eval test smoke baselines all clean fmt
+.PHONY: help setup data train eval test smoke baselines all clean fmt lint typecheck
 
 help:
 	@echo "Targets:"
@@ -18,6 +18,8 @@ help:
 	@echo "  all        setup -> data -> baselines -> train -> eval"
 	@echo "  clean      remove generated data, models, runs"
 	@echo "  fmt        ruff format + lint"
+	@echo "  lint       ruff check (no autofix)"
+	@echo "  typecheck  mypy on src/"
 
 setup:
 	uv sync --extra dev
@@ -48,3 +50,9 @@ clean:
 fmt:
 	$(PY) ruff format src tests
 	$(PY) ruff check --fix src tests
+
+lint:
+	$(PY) ruff check src tests
+
+typecheck:
+	$(PY) mypy

@@ -1,12 +1,17 @@
 """Baselines. The deep model only deserves credit for what it beats here.
 
-Four baselines, in order of increasing expressiveness:
+Five baselines, in order of increasing expressiveness:
 
     1. mean             — predicts the train-set mean CLV. Sanity floor.
     2. carry_forward    — predicts last-12-months revenue (no model). The
                           baseline that often embarrasses ML on contractual B2B.
-    3. linear_rfm       — Ridge regression on engineered RFM + categorical features.
-    4. lightgbm         — Gradient-boosted trees on the same engineered features.
+    3. naive_log_lr     — Ridge on a SINGLE feature: log1p(last-12-months revenue).
+                          The "is the deep model's complexity earning its keep"
+                          ablation — if the 91k-param BiLSTM doesn't beat a
+                          1-feature linear regression by a meaningful margin,
+                          ship the linear regression.
+    4. linear_rfm       — Ridge regression on engineered RFM + categorical features.
+    5. lightgbm         — Gradient-boosted trees on the same engineered features.
 
 Each baseline returns a `BaselineResult` with predictions for train/val/test
 and (where applicable) churn predictions. CLV predictions are returned in
@@ -166,10 +171,43 @@ def fit_lightgbm(ds: Datasets, seed: int = 42) -> BaselineResult:
     )
 
 
+def fit_naive_log_lr(ds: Datasets) -> BaselineResult:
+    """Single-feature ablation: linear regression on log1p(last-12-months revenue).
+
+    Why this matters
+    ----------------
+    The deep model has 91k params and a custom recency-attention layer. The
+    LightGBM baseline has thousands of leaves and full RFM features. The
+    *cheapest* possible learned baseline is "fit y = a + b * log1p(L12rev)"
+    using ONE input feature. If the deep model does not meaningfully beat
+    this one-feature linear regression, every other architectural decision
+    in the project is unjustified. This is the analogue of the null-engine
+    ablation used in the profitability-pricing repo.
+    """
+    L12_train = _last_12_revenue(ds.train_arrays).reshape(-1, 1)
+    L12_val = _last_12_revenue(ds.val_arrays).reshape(-1, 1)
+    L12_test = _last_12_revenue(ds.test_arrays).reshape(-1, 1)
+    x_train = np.log1p(L12_train.clip(min=0.0))
+    x_val = np.log1p(L12_val.clip(min=0.0))
+    x_test = np.log1p(L12_test.clip(min=0.0))
+    y_train_log = np.log1p(ds.train_arrays.y_clv_raw.clip(min=0.0))
+    reg = Ridge(alpha=1.0).fit(x_train, y_train_log)
+    pred_val = np.maximum(np.expm1(reg.predict(x_val)), 0.0).astype(np.float32)
+    pred_te = np.maximum(np.expm1(reg.predict(x_test)), 0.0).astype(np.float32)
+    return BaselineResult(
+        name="naive_log_lr",
+        pred_clv_test=pred_te,
+        pred_clv_val=pred_val,
+        pred_churn_test=None,
+        pred_churn_val=None,
+    )
+
+
 def fit_all(ds: Datasets, seed: int = 42) -> dict[str, BaselineResult]:
     return {
         "mean": fit_mean(ds),
         "carry_forward": fit_carry_forward(ds),
+        "naive_log_lr": fit_naive_log_lr(ds),
         "linear_rfm": fit_linear_rfm(ds),
         "lightgbm": fit_lightgbm(ds, seed=seed),
     }

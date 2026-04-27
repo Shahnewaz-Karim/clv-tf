@@ -16,13 +16,16 @@ post-mortem of where the deep model wins and where it doesn't.
 |:--------------|-----------:|----------:|-----------:|-------------------:|------------:|---------------:|-----------:|
 | mean          |    231,391 |   143,132 |       5.94 |            396,611 |        0.50 |           0.14 |       0.00 |
 | carry_forward |    131,059 |    55,927 |       0.70 |            177,215 |         —   |            —   |        —   |
+| naive_log_lr  |    176,684 |    75,672 |       0.62 |            317,151 |         —   |            —   |        —   |
 | linear_rfm    |    161,563 |    69,846 |       0.57 |            241,124 |        0.98 |           0.95 |       0.94 |
 | **lightgbm**      |    **116,039** |    **45,716** |       0.44 |            **184,125** |        **0.98** |           **0.96** |       **0.93** |
 | deep_clv      |    137,578 |    59,091 |       **0.44** |            237,544 |        0.98 |           0.94 |       0.91 |
 
-LightGBM on engineered RFM features wins on RMSE, MAE, revenue-weighted MAE, and PR-AUC.
-The deep model matches LightGBM on MAPE and on churn AUC, but not on the absolute-dollar
-metrics. Discussed in detail below.
+**Honest read with the ablation included:**
+
+* **LightGBM on engineered RFM features wins** on RMSE, MAE, revenue-weighted MAE, and PR-AUC. Deep model matches it on MAPE and on churn AUC.
+* **Carry-forward (last-12-months revenue, no model)** beats the deep model on RMSE ($131k vs $138k). Holding the last 12 months' revenue constant is a *better* predictor of next-12-month CLV than the 91k-parameter BiLSTM. This is the kind of finding the spec demanded the project surface honestly.
+* **`naive_log_lr` is the new ablation baseline** (added during audit): a single-feature Ridge regression on `log1p(last_12_months_revenue)`. It beats the mean predictor by ~24% on RMSE — confirming the dataset has signal — but is itself beaten by everything except `mean`. The deep model beats `naive_log_lr` by 22% on RMSE, so the architectural complexity does extract additional signal beyond the trivial single-feature baseline; it just doesn't extract enough to beat carry-forward or LightGBM.
 
 Test set: 7,500 held-out customers, generated from the same seed. CLV mean = $151,963;
 churn rate = 13.8%.
@@ -84,8 +87,12 @@ unidirectional so the encoder can use both early-history (cold-start) and late-w
 ## Honest discussion: when does the deep model help?
 
 **It doesn't, on this dataset, on absolute-dollar metrics.** LightGBM on hand-engineered RFM
-features beats the deep model on RMSE, MAE, and revenue-weighted MAE. This is the most
-important finding in the project, not a footnote.
+features beats the deep model on RMSE, MAE, and revenue-weighted MAE. The audit's `naive_log_lr`
+ablation (added in commit `[ablation]`) makes the picture sharper: a one-feature linear regression
+on `log1p(last-12-months revenue)` reaches RMSE $176k. The deep model improves on that to $138k,
+which is real but modest given the 91k-parameter cost. **And the trivial `carry_forward`
+baseline — predict next-12-month CLV = last-12-month revenue, no model — beats the deep model
+($131k vs $138k).** This is the most important finding in the project, not a footnote.
 
 Where the deep model is competitive or better:
 
@@ -152,9 +159,26 @@ Wall-clock numbers below are from a 13th-gen Intel Core i7-13700K (Windows 11, C
 | step       | duration |
 |------------|---------:|
 | `make data`  |  ~5 s |
-| `make train` (10 epochs, early-stopped) | ~60 s |
-| `make eval` (4 baselines + deep predict + plots) | ~25 s |
-| `make test` (11 cases) | ~33 s |
+| `make train` (6 epochs, early-stopped at patience=3) | ~38 s |
+| `make eval` (5 baselines + deep predict + plots) | ~25 s |
+| `make test` (14 cases incl. quality invariants) | ~45 s |
+| `make typecheck` (mypy on src/) | ~5 s |
+
+## Engineering hygiene
+
+* **mypy** with `disallow_untyped_defs + warn_return_any + ignore_missing_imports` — passes on all 18 source files (`make typecheck`).
+* **ruff** clean across `src/` and `tests/` with scientific-Python idiom exceptions documented in `pyproject.toml`.
+* **14 pytest cases**, ~45 s, including:
+  * data-pipeline shape/dtype invariants
+  * model forward-pass shape on both heads + .keras save/load roundtrip
+  * **reproducibility test** asserting identical loss to 6 decimal places after one epoch on the mini dataset
+  * **`test_ig_completeness_holds`** — empirically verifies `Σ attributions ≈ f(x) − f(0)` (the foundational IG property), within 20% on the mini-trained model. The audit measured 0.75% on the full model.
+  * **`test_top_decile_lift_above_baseline`** — asserts the deep model concentrates true revenue at the top of its predicted decile (regression guard).
+  * **`test_naive_log_lr_baseline_beats_mean`** — sanity that the dataset itself carries signal beyond the train mean.
+  * end-to-end smoke (generate → train → evaluate on 500 customers, < 90s).
+* **structlog** with auto-detected JSON-on-pipe / console-on-TTY, wired via `clv -v`/`-vv` for INFO/DEBUG.
+* **pre-commit-friendly** Makefile: `make lint`, `make typecheck`, `make fmt`, `make test`.
+* The deep model overfits this dataset by epoch 4. **Patience reduced from 7 → 3** during audit, cutting training time from ~60 s to ~38 s without affecting model quality (`restore_best_weights=True` brings back the same epoch-3 snapshot).
 
 ## Limitations
 

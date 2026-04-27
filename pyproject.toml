@@ -25,6 +25,7 @@ dependencies = [
     "tqdm>=4.66",
     "shap>=0.45",
     "tabulate>=0.9",  # used by pandas.DataFrame.to_markdown for the results table
+    "structlog>=24.1",
 ]
 
 [project.optional-dependencies]
@@ -36,6 +37,10 @@ dev = [
     "nbclient>=0.10",
     "ipykernel>=6.29",
     "ruff>=0.4",
+    "mypy>=1.10",
+    "types-PyYAML",
+    "types-tabulate",
+    "pandas-stubs",
 ]
 
 [project.scripts]
@@ -66,6 +71,18 @@ select = ["E", "F", "I", "B", "UP", "N"]
 # N806/N812/N803: scientific-Python conventions (X for feature matrices,
 # T for time dim, L for keras.layers alias) — flagging these is noise.
 ignore = ["E501", "N806", "N812", "N803"]
+
+[tool.mypy]
+# Pragmatic mode: require public-API annotations, no implicit-Optional, but
+# don't fight numpy/TF/sklearn/keras Any-return noise. Strict mypy on a
+# scientific-Python codebase is mostly bikeshedding; this catches real bugs.
+python_version = "3.11"
+files = ["src"]
+disallow_untyped_defs = true
+no_implicit_optional = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

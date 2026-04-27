@@ -249,7 +249,7 @@ def _build_transactions(
     rng: np.random.Generator,
     customers: pd.DataFrame,
     n_total_months: int,
-) -> tuple[pd.DataFrame, np.ndarray]:
+) -> tuple[pd.DataFrame, dict[str, np.ndarray]]:
     """Build the long-form monthly transaction table + the dense top-category index array.
 
     The top_category for an active month is sampled from the customer's industry-affine mix.
